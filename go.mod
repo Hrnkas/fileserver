@@ -1,4 +1,4 @@
-module fileserver
+module github.com/Hrnkas/fileserver
 
 go 1.22.5
 
