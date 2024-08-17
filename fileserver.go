@@ -104,15 +104,6 @@ func (fs Fileserver) Store(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (fs Fileserver) getPartFilename(name, ext string) string {
-	return fs.uploadpath + "/" + name + "." + ext
-}
-
-func sanitizeFilename(filename string) string {
-	pathNameRegExp := regexp.MustCompile(`[^a-zA-Z0-9-_\.]`)
-	return string(pathNameRegExp.ReplaceAll([]byte(filename), []byte("")))
-}
-
 func (fs Fileserver) InitUpload(w http.ResponseWriter, req *http.Request) {
 
 	if !fs.checkAuth(w, req) {
@@ -290,6 +281,7 @@ func (fs Fileserver) DownloadFile(w http.ResponseWriter, req *http.Request) {
 		filename_instore := fs.getPartFilename(upload.Code, part.PartCode)
 
 		f, _ := os.Open(filename_instore)
+		defer f.Close()
 
 		io.Copy(w, f) //write file to response writer
 	}
@@ -340,4 +332,13 @@ func (fs Fileserver) Serve() error {
 	mux.HandleFunc("DELETE /delete/{code}", fs.DeleteUpload)
 
 	return http.ListenAndServe(":8080", mux)
+}
+
+func (fs Fileserver) getPartFilename(name, ext string) string {
+	return fs.uploadpath + "/" + name + "." + ext
+}
+
+func sanitizeFilename(filename string) string {
+	pathNameRegExp := regexp.MustCompile(`[^a-zA-Z0-9-_\.]`)
+	return string(pathNameRegExp.ReplaceAll([]byte(filename), []byte("")))
 }
