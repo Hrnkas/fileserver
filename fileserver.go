@@ -85,8 +85,6 @@ func (fs Fileserver) Store(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fs.db.Create(&Part{PartCode: code_part, UploadID: upload.ID})
-
 	filepath := fs.getPartFilename(upload.Code, code_part)
 	f, err := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE, 0644)
 	//lint:ignore SA5001 - I dont care about error from file close
@@ -102,6 +100,8 @@ func (fs Fileserver) Store(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("File " + filepath + " could not be written. Check the server configuration."))
 		return
 	}
+
+	fs.db.Create(&Part{PartCode: code_part, UploadID: upload.ID})
 }
 
 func (fs Fileserver) InitUpload(w http.ResponseWriter, req *http.Request) {
