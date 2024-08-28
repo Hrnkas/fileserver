@@ -1,11 +1,11 @@
 # Fileserver
 
-Asymetric fileserver golang package
+Asymmetric fileserver golang package
 
 ## Description
 
 This is a package for golang.
-Asymetric fileserver allows upload of files without classic authentication.
+Asymmetric fileserver allows upload of files without classic authentication.
 It is intended for use where reciever is expecting sender to upload some files. Files can only be downloaded by receiver.
 Reciever generates a unique code and initializes upload with the server (PUT /init/). Here an authentication is needed.
 Then, the reciever communicates the code to the sender, which can use it as impromptu authentication to upload a file in one piece or multiple parts.
