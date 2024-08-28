@@ -317,9 +317,12 @@ func (fs Fileserver) DeleteUpload(w http.ResponseWriter, req *http.Request) {
 		os.Remove(filename_instore)
 
 		fs.db.Delete(&part)
+		fs.db.Unscoped().Delete(&part)
 	}
 
 	fs.db.Delete(&upload)
+	fs.db.Unscoped().Delete(&upload)
+
 }
 
 func (fs Fileserver) Serve() error {

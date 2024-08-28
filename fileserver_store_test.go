@@ -86,3 +86,31 @@ func TestStore(t *testing.T) {
 	})
 
 }
+func TestDelete(t *testing.T) {
+	db := setupTestDB(t)
+	os.MkdirAll("/tmp/", os.ModePerm)
+	fs, _ := NewFileserver("/tmp", db, func(w http.ResponseWriter, req *http.Request) bool { return true })
+
+	// Prepare the upload entry in the database
+	upload := Upload{Code: "testcode", Filename: "testfile"}
+	db.Create(&upload)
+
+	t.Run("Second insert", func(t *testing.T) {
+
+		req := httptest.NewRequest(http.MethodDelete, "/delete/testcode", strings.NewReader(""))
+		req.SetPathValue("code", "testcode")
+
+		w := httptest.NewRecorder()
+
+		fs.DeleteUpload(w, req)
+
+		resp := w.Result()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		//try to insert again
+		upload := Upload{Code: "testcode", Filename: "testfile"}
+		errCreate := db.Create(&upload).Error
+		assert.NoError(t, errCreate, "second create should have been successful")
+	})
+
+}
