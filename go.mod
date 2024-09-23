@@ -1,8 +1,8 @@
 module github.com/Hrnkas/fileserver
 
-go 1.22.5
+go 1.22
 
-require gorm.io/gorm v1.25.11
+require gorm.io/gorm v1.25.12
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -15,6 +15,6 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
 	gorm.io/driver/sqlite v1.5.6
 )

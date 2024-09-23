@@ -52,6 +52,12 @@ func (fs Fileserver) getRegisteredUpload(code_upload string) (Upload, error) {
 	return up, err
 }
 
+func (fs Fileserver) getAllRegisteredUploads() ([]Upload, error) {
+	var uploads []Upload
+	err := fs.db.Find(&uploads).Error
+	return uploads, err
+}
+
 func (fs Fileserver) getUploadParts(upload Upload) ([]Part, error) {
 	var parts []Part
 	err := fs.db.Where("upload_id = ?", upload.ID).Order("part_code").Find(&parts).Error
@@ -167,6 +173,28 @@ func (fs Fileserver) GetFileInfo(w http.ResponseWriter, req *http.Request) {
 	}
 
 	result := FileInfoResult{Upload: upload, Parts: parts}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (fs Fileserver) GetFileInfoList(w http.ResponseWriter, req *http.Request) {
+	if !fs.checkAuth(w, req) {
+		return
+	}
+
+	uploads, err := fs.getAllRegisteredUploads()
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("Upload list could not be retrieved."))
+		return
+	}
+
+	type FileInfoListResult struct {
+		Uploads []Upload
+	}
+
+	result := FileInfoListResult{Uploads: uploads}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
@@ -327,6 +355,7 @@ func (fs Fileserver) DeleteUpload(w http.ResponseWriter, req *http.Request) {
 
 func (fs Fileserver) Serve() error {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /info/", fs.GetFileInfoList)
 	mux.HandleFunc("GET /info/{code}", fs.GetFileInfo)
 	mux.HandleFunc("GET /download/{code}/{part}", fs.DownloadPart)
 	mux.HandleFunc("GET /download/{code}", fs.DownloadFile)
