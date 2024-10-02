@@ -107,12 +107,22 @@ func (fs Fileserver) Store(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fs.db.Create(&Part{PartCode: code_part, UploadID: upload.ID})
+	err = fs.db.Create(&Part{PartCode: code_part, UploadID: upload.ID}).Error
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Database write error"))
+
+		//cleanup (delete file)
+		os.Remove(filepath) //error can be ignored at this stage
+
+		return
+	}
 }
 
 func (fs Fileserver) InitUpload(w http.ResponseWriter, req *http.Request) {
 
 	if !fs.checkAuth(w, req) {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
@@ -134,18 +144,22 @@ func (fs Fileserver) InitUpload(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(up)
+	errEncode := json.NewEncoder(w).Encode(up)
+	if errEncode != nil {
+		http.Error(w, errEncode.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (fs Fileserver) GetFileInfo(w http.ResponseWriter, req *http.Request) {
 	if !fs.checkAuth(w, req) {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 	code_upload := req.PathValue("code")
 	if strings.TrimSpace(code_upload) == "" {
 		//error invalid request
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Parameters must not be empty."))
+		http.Error(w, "Parameters must not be empty.", http.StatusBadRequest)
 		return
 	}
 
@@ -153,8 +167,7 @@ func (fs Fileserver) GetFileInfo(w http.ResponseWriter, req *http.Request) {
 
 	upload, err := fs.getRegisteredUpload(code_upload)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Upload with given code could not be found."))
+		http.Error(w, "Upload with given code could not be found.", http.StatusNotFound)
 		return
 	}
 
@@ -162,8 +175,7 @@ func (fs Fileserver) GetFileInfo(w http.ResponseWriter, req *http.Request) {
 	parts, errParts := fs.getUploadParts(upload)
 
 	if errParts != nil && errParts != gorm.ErrRecordNotFound {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Database error"))
+		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
@@ -175,18 +187,22 @@ func (fs Fileserver) GetFileInfo(w http.ResponseWriter, req *http.Request) {
 	result := FileInfoResult{Upload: upload, Parts: parts}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	errEncode := json.NewEncoder(w).Encode(result)
+	if errEncode != nil {
+		http.Error(w, errEncode.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (fs Fileserver) GetFileInfoList(w http.ResponseWriter, req *http.Request) {
 	if !fs.checkAuth(w, req) {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	uploads, err := fs.getAllRegisteredUploads()
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Upload list could not be retrieved."))
+		http.Error(w, "Upload list could not be retrieved.", http.StatusNotFound)
 		return
 	}
 
@@ -197,11 +213,16 @@ func (fs Fileserver) GetFileInfoList(w http.ResponseWriter, req *http.Request) {
 	result := FileInfoListResult{Uploads: uploads}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	errEncode := json.NewEncoder(w).Encode(result)
+	if errEncode != nil {
+		http.Error(w, errEncode.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (fs Fileserver) DownloadPart(w http.ResponseWriter, req *http.Request) {
 	if !fs.checkAuth(w, req) {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
@@ -209,22 +230,19 @@ func (fs Fileserver) DownloadPart(w http.ResponseWriter, req *http.Request) {
 	code_part := req.PathValue("part")
 	if strings.TrimSpace(code_upload) == "" || strings.TrimSpace(code_part) == "" {
 		//error invalid request
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Parameters must not be empty."))
+		http.Error(w, "Parameters must not be empty.", http.StatusBadRequest)
 		return
 	}
 
 	upload, err := fs.getRegisteredUpload(code_upload)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Upload with given code could not be found."))
+		http.Error(w, "Upload with given code could not be found.", http.StatusNotFound)
 		return
 	}
 
 	part, err := fs.getUploadPart(upload, code_part)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Upload part with given code could not be found."))
+		http.Error(w, "Upload part with given code could not be found.", http.StatusNotFound)
 		return
 	}
 
@@ -232,8 +250,7 @@ func (fs Fileserver) DownloadPart(w http.ResponseWriter, req *http.Request) {
 
 	f, err := os.Open(filename_instore)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Error while retrieving the part"))
+		http.Error(w, "Can not open file", http.StatusInternalServerError)
 		return
 	}
 	defer f.Close()
@@ -243,8 +260,7 @@ func (fs Fileserver) DownloadPart(w http.ResponseWriter, req *http.Request) {
 	//todo-maybe: make GetFileSize function
 	stat, err := f.Stat()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Error while retrieving the file size"))
+		http.Error(w, "Can not read file size", http.StatusInternalServerError)
 		return
 	}
 	size := stat.Size()
@@ -253,34 +269,36 @@ func (fs Fileserver) DownloadPart(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 
-	io.Copy(w, f) //write file to response writer
+	_, errCopy := io.Copy(w, f) //write file to response writer
+	if errCopy != nil {
+		http.Error(w, "Can not read file", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (fs Fileserver) DownloadFile(w http.ResponseWriter, req *http.Request) {
 
 	if !fs.checkAuth(w, req) {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	code_upload := req.PathValue("code")
 	if strings.TrimSpace(code_upload) == "" {
 		//error invalid request
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Parameters must not be empty."))
+		http.Error(w, "Parameters must not be empty.", http.StatusBadRequest)
 		return
 	}
 
 	upload, err := fs.getRegisteredUpload(code_upload)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Upload with given code could not be found."))
+		http.Error(w, "Upload with given code could not be found.", http.StatusNotFound)
 		return
 	}
 
 	parts, err := fs.getUploadParts(upload)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Upload part with given code could not be found."))
+		http.Error(w, "Upload part with given code could not be found.", http.StatusNotFound)
 		return
 	}
 
@@ -291,8 +309,7 @@ func (fs Fileserver) DownloadFile(w http.ResponseWriter, req *http.Request) {
 
 		stat, err := os.Stat(filename_instore)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Error while retrieving the file size"))
+			http.Error(w, "Can not read file size", http.StatusInternalServerError)
 			return
 		}
 
@@ -308,41 +325,49 @@ func (fs Fileserver) DownloadFile(w http.ResponseWriter, req *http.Request) {
 	for _, part := range parts {
 		filename_instore := fs.getPartFilename(upload.Code, part.PartCode)
 
-		f, _ := os.Open(filename_instore)
+		f, err := os.Open(filename_instore)
+		if err != nil {
+			http.Error(w, "Can not open file", http.StatusInternalServerError)
+		}
 		defer f.Close()
 
-		io.Copy(w, f) //write file to response writer
+		_, errCopy := io.Copy(w, f) //write file to response writer
+		if errCopy != nil {
+			http.Error(w, "Can not read file", http.StatusInternalServerError)
+		}
 	}
 }
 
 func (fs Fileserver) DeleteUpload(w http.ResponseWriter, req *http.Request) {
 
 	if !fs.checkAuth(w, req) {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	code_upload := req.PathValue("code")
 	if strings.TrimSpace(code_upload) == "" {
 		//error invalid request
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Parameters must not be empty."))
+		http.Error(w, "Parameters must not be empty.", http.StatusBadRequest)
 		return
 	}
 
 	upload, err := fs.getRegisteredUpload(code_upload)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Upload with given code could not be found."))
+		http.Error(w, "Upload with given code could not be found.", http.StatusNotFound)
 		return
 	}
 
 	//remove from database
-	parts, _ := fs.getUploadParts(upload)
+	parts, errDB := fs.getUploadParts(upload)
+	if errDB != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+	}
 
 	for _, part := range parts {
 		//remove file on disk
 		filename_instore := fs.getPartFilename(upload.Code, part.PartCode)
-		os.Remove(filename_instore)
+		_ = os.Remove(filename_instore) //safe to ignore error
 
 		fs.db.Delete(&part)
 		fs.db.Unscoped().Delete(&part)
