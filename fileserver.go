@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -179,12 +180,22 @@ func (fs Fileserver) GetFileInfo(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	type UploadWithDate struct {
+		Upload
+		LastUpload time.Time
+	}
+
 	type FileInfoResult struct {
-		Upload Upload
+		Upload UploadWithDate
 		Parts  []Part
 	}
 
-	result := FileInfoResult{Upload: upload, Parts: parts}
+	//find the latest uploaded part
+	// Assume the first part has the latest CreatedAt initially
+	latestPart := parts[len(parts)-1]
+
+	uploadWithDate := UploadWithDate{Upload: upload, LastUpload: latestPart.CreatedAt}
+	result := FileInfoResult{Upload: uploadWithDate, Parts: parts}
 
 	w.Header().Set("Content-Type", "application/json")
 	errEncode := json.NewEncoder(w).Encode(result)
